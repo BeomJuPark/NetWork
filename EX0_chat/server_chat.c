@@ -9,9 +9,13 @@
 #include <ctype.h>
 #include <errno.h>
 
+#define MAX_CLIENTS 10 // MAx Client cnt
+
 int main(int argc, char *argv[]) {
 	struct sockaddr_in server, remote;
 	int request_sock, new_sock;
+        int client_sockets[MAX_CLIENTS]; //Client socket array
+        int client_cnt = 0; //Current Client cnt
 	int i, nfound, fd, maxfd, bytesread, addrlen;
 	fd_set rmask, mask;
 	static struct timeval timeout = { 5, 0 }; /* 5 seconds */
@@ -66,6 +70,10 @@ int main(int argc, char *argv[]) {
 			printf("connection from host %s, port %d, socket %d\n",
 				inet_ntoa(remote.sin_addr), ntohs(remote.sin_port),
 				new_sock);
+                        char info_msg[BUFSIZ];
+                        snprintf(info_msg, sizeof(info_msg), "Server IP: %s, Port : %d \n",inet_ntoa(remote.sin_addr), ntohs(remote.sin_port));
+                        write(new_sock, info_msg, strlen(info_msg));
+                        client_sockets[client_cnt++] = new_sock; //new client add
 			FD_SET(new_sock, &mask);
 			if (new_sock > maxfd)
 				maxfd = new_sock;
@@ -81,22 +89,35 @@ int main(int argc, char *argv[]) {
 					/* fall through */
 				}
 				if (bytesread<=0) {
-					printf("server: end of file on %d\n",fd);
-					FD_CLR(fd, &mask);
-					if (close(fd)) perror("close");
-					continue;
-				}
-				buf[bytesread] = '\0';
-				printf("%s: %d bytes from %d: %s\n",
-					argv[0], bytesread, fd, buf);
-				for(i = 0; i < bytesread; i++)
-					buf[i] = toupper(buf[i]);
+			          printf("server: end of file on %d\n",fd);
+				  FD_CLR(fd, &mask);
+				  if (close(fd)) perror("close");
+                                  for(i = 0 ; i < client_cnt ; i++)
+                                  {
+                                    if(client_sockets[i] == fd)
+                                    {
+                                        client_sockets[i] = client_sockets[client_cnt-1];
+                                        break;
+                                    }
+                                  }
 
-				/* echo it back */
-				if (write(fd, buf, bytesread) != bytesread)
-					perror("echo");
-			}
-		}
-	}
-} /* main - serverorg.c */
+                                  client_cnt--;
+                                  break;
+			        }
+	                        buf[bytesread] = '\0';
+
+                                for( i = 0 ; i < client_cnt; i++)
+                                {
+                                   if(client_sockets[i] != fd)
+                                   {
+                                     if(write(client_sockets[i], buf, bytesread) != bytesread)
+                                       perror("echo");
+                                   }
+                                }
+                        }
+                }
+        }
+}
+
+
 
